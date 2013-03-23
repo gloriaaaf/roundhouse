@@ -27,7 +27,7 @@
   <property name="dirs.build_results" value="${dirs.build_artifacts}${path.separator}compile" overwrite="false" />
   <property name="msbuild.logger" value="ThoughtWorks.CruiseControl.MSBuild.XmlLogger,&quot;${dirs.lib}${path.separator}NAnt${path.separator}ThoughtWorks.CruiseControl.MSBuild.dll&quot;" />
   <property name="path_to_solution" value="." overwrite="false" />
-  <property name="microsoft.framework" value="net-3.5" overwrite="false" />
+  <property name="microsoft.framework" value="net-4.0" overwrite="false" />
   <property name="msbuild.configuration" value="Release" overwrite="false" />
   <property name="msbuild.platform" value="Any CPU" overwrite="false" />
   <property name="msbuild.override_output_path" value="true" overwrite="false" />
@@ -37,7 +37,7 @@
   <property name="solution.path.windows.mono" value="${string::replace(dirs.current,'\','/')}/${string::replace(path_to_solution,'\','/')}/${project.name}.sln" />
   <property name="solution.path" value="${dirs.current}${path.separator}${path_to_solution}${path.separator}${project.name}.vbp" if="${microsoft.framework =='vb6'}" />
   <property name="nant.settings.currentframework" value="mono-2.0" if="${platform::is-unix()}" />
-  <property name="nant.settings.currentframework" value="net-3.5" if="${microsoft.framework !='vb6' and platform::is-windows()}" />
+  <property name="nant.settings.currentframework" value="net-4.0" if="${microsoft.framework !='vb6' and platform::is-windows()}" />
   <property name="app.xbuild" value="C:\Program Files (x86)\Mono-2.8\bin\xbuild.bat" overwrite="false" if="${platform::is-windows() and file::exists('C:\Program Files (x86)\Mono-2.8\bin\xbuild.bat')}" />
   <property name="app.xbuild" value="C:\Program Files\Mono-2.8\bin\xbuild.bat" overwrite="false" if="${platform::is-windows() and file::exists('C:\Program Files\Mono-2.8\bin\xbuild.bat')}" />
   <property name="app.xbuild" value="xbuild" overwrite="false" if="${platform::is-unix()}" />

@@ -60,7 +60,7 @@
     <property name="dirs.merge.to" value="${environment::get-variable('uc.dirs.merge.to')}" if="${environment::variable-exists('uc.dirs.merge.to')}" />
     <property name="file.merge.name" value="${environment::get-variable('uc.file.merge.name')}" if="${environment::variable-exists('uc.file.merge.name')}" />
     <property name="merge.target.type" value="${environment::get-variable('uc.merge.target.type')}" if="${environment::variable-exists('uc.merge.target.type')}" />
-    <property name="args.ilmerge" value="/internalize /target:${merge.target.type} /out:${dirs.merge.to}${path.separator}${file.merge.name} /log:${dirs.merge.log}${path.separator}${log.merge} /ndebug /allowDup ${file.merge.name} " />
+    <property name="args.ilmerge" value="/internalize /targetplatform:v4 /target:${merge.target.type} /out:${dirs.merge.to}${path.separator}${file.merge.name} /log:${dirs.merge.log}${path.separator}${log.merge} /ndebug /allowDup ${file.merge.name} " />
     <property name="args.ilmerge" value="/internalize:${path.file.internalize.ignore} /target:${merge.target.type} /out:${dirs.merge.to}${path.separator}${file.merge.name} /log:${dirs.merge.log}${path.separator}${log.merge} /ndebug /allowDup ${file.merge.name} " if="${file::exists(path.file.internalize.ignore)}"/>
   </target>
   
@@ -132,6 +132,7 @@
   </target>
 
   <target name="load_uppercut_assemblies">
+	<echo level="Warning" message="Gloria assembly ${path.uppercut.assembly}"/>
     <loadtasks assembly="${path.uppercut.assembly}" if="${file::exists(path.uppercut.assembly)}" />
   </target>
   
