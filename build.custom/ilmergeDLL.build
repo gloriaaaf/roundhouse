@@ -62,7 +62,6 @@
           <include name="${dirs.merge.from}\MySql.Data.dll" />
           <include name="${dirs.merge.from}\Npgsql.dll" />
           <include name="${dirs.merge.from}\Mono.Security.dll" />
-		  <include name="${dirs.merge.from}\oracle.dataaccess.dll" />
         </items>
       </in>
       <do>
@@ -107,7 +106,6 @@
         <include name="Npgsql.dll" />
         <include name="Mono.Security.dll" />
         <include name="System.Data.SQLite.dll" />
-		<include name="oracle.dataaccess.dll" />
       </fileset>
     </delete>
   </target>
