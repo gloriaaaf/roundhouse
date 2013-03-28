@@ -21,6 +21,7 @@ namespace roundhouse.databases.oracle
         public static string statement_separator_regex_declare = @"(?<KEEP1>(?:\s*CREATE\s*OR\s*REPLACE[\S\s]*?\|\{))|(?<KEEP1>\s*)(?<BATCHSPLITTER>(?:\s*DECLARE{1}[\S\s]*?;\s*?/(?!\*)))(?<KEEP2>\s*)";
         public static string statement_separator_regex_begin_block = @"(?<KEEP1>(?:\s*DECLARE{1}[\S\s]*?\|\{))|(?<KEEP1>(?:\s*CREATE\s*OR\s*REPLACE[\S\s]*?\|\{))|(?<KEEP1>\s*)(?<BATCHSPLITTER>(?:\s*BEGIN[\S\s]*?;\s*?/(?!\*)))(?<KEEP2>\s*)";
         public static string statement_separator_regex_view = @"(?:CREATE\s*OR\s*REPLACE[\S\s]*?VIEW[\S\s]*?;\s*?/(?!\*))";
+        public static string statement_separator_regex_synonym = @"(?:CREATE\s*OR\s*REPLACE[\S\s]*?SYNONYM[\S\s]*?;\s*?/(?!\*))";
         public static string regex_end_block = @"(;[\s]*?/(?!\*))";
         public static string regex_comments = @"(:?\s*-{2}.*)|(:?\s*/{1}\*{1}[\S\s]*?\*{1}/{1})";
 
@@ -80,8 +81,9 @@ namespace roundhouse.databases.oracle
             if (matched_item.Groups["BATCHSPLITTER"].Success)
             {
                 Regex regex_view = new Regex(statement_separator_regex_view, RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                Regex regex_synonym = new Regex(statement_separator_regex_synonym, RegexOptions.IgnoreCase | RegexOptions.Multiline);
                 //Views blocks don't need ; at he end of the statement otherwise throw invalid character error
-                if (regex_view.IsMatch(matched_item.Groups["BATCHSPLITTER"].Value))
+                if (regex_view.IsMatch(matched_item.Groups["BATCHSPLITTER"].Value) || regex_synonym.IsMatch(matched_item.Groups["BATCHSPLITTER"].Value))
                 {
                     return Regex.Replace(matched_item.Groups["BATCHSPLITTER"].Value, regex_end_block, batch_terminator_replacement_string, RegexOptions.IgnoreCase | RegexOptions.Multiline);
                 }

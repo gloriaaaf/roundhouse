@@ -190,32 +190,35 @@ INSERT [dbo].[Foo] ([Bar]) VALUES (N'Go speed racer, go speed racer, go speed ra
 "};
 
         	public static string plsql_statement =
-				@"
+                @"
 SQL1;
-;
 SQL2;
-;
-tmpSql := 'DROP SEQUENCE mutatieStockID';
-EXECUTE IMMEDIATE tmpSql; 
-;
 BEGIN
 INSERT into Table (columnname) values ("";"");
 UPDATE Table set columnname="";"";
 END;
+/
+DECLARE
+BEGIN
+END;
+/ 
+CREATE OR REPLACE PACKAGE PACKAGE_NAME IS
+ body
+END PACKAGE_NAME;
+/
 ";
-			public static string[] plsql_statement_scrubbed = new string[] { @"
-SQL1;
- " , @" 
-SQL2;
- " , @" 
-tmpSql := 'DROP SEQUENCE mutatieStockID';
-EXECUTE IMMEDIATE tmpSql; 
- " , @" 
-BEGIN
+			public static string[] plsql_statement_scrubbed = new string[] { @"SQL1" ,
+@"SQL2" , 
+@"BEGIN
 INSERT into Table (columnname) values ("";"");
 UPDATE Table set columnname="";"";
-END;
-" };
+END;" , 
+@"DECLARE
+BEGIN
+END;", 
+@"CREATE OR REPLACE PACKAGE PACKAGE_NAME IS
+ body
+END PACKAGE_NAME;" };
         }
     }
 }

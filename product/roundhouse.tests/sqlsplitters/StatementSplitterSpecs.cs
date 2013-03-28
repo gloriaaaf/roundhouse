@@ -583,7 +583,7 @@ GO
 		{
 			private because b = () =>
 			{
-                splitter = new DefaultStatementSplitter(plsql_separator_regex_string);
+                splitter = new OracleStatementSplitter(plsql_separator_regex_string);
 			};
 
 			[Observation]
@@ -595,51 +595,41 @@ GO
 				CollectionAssert.AreEqual(SplitterContext.FullSplitter.plsql_statement_scrubbed, sql_statement_scrubbed);
 			}
 
-			[Observation]
-			public void should_replace_on_semicolon_on_its_own_line()
-			{
-				const string sql_to_match = @"SQL1 
-;
-SQL2";
-				var expected_scrubbed =  new [] { @"SQL1 
- " , @" 
-SQL2" };
-				Console.WriteLine(sql_to_match);
-				var sql_statement_scrubbed = splitter.split(sql_to_match).ToArray();
-				CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
-			}
-
-			[Observation]
-			public void should_not_replace_on_semicolon_inside_of_comments()
-			{
-				string sql_to_match = @"/* ; */";
-				var expected_scrubbed =  new [] { @"/* ; */" };
-				Console.WriteLine(sql_to_match);
+            [Observation]
+            public void should_not_replace_on_semicolon_inside_of_comments()
+            {
+                string sql_to_match = @"/* ; */
+CREATE ROLE NEWROLE;";
+                var expected_scrubbed = new[] { @"/* ; */
+CREATE ROLE NEWROLE" };
+                Console.WriteLine(sql_to_match);
                 var sql_statement_scrubbed = splitter.split(sql_to_match).ToArray();
-				CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
-			}
+                CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
+            }
 
-			[Observation]
-			public void should_not_replace_on_semicolon_at_end_of_line()
+
+            [Observation]
+            public void should_not_replace_on_semicolon_inside_of_single_line_comments()
+            {
+                string sql_to_match = @"--Comments;
+CREATE ROLE NEWROLE;";
+                var expected_scrubbed = new[] { @"--Comments;
+CREATE ROLE NEWROLE" };
+                Console.WriteLine(sql_to_match);
+                var sql_statement_scrubbed = splitter.split(sql_to_match).ToArray();
+                CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
+            }
+
+            [Observation]
+			public void should_replace_on_semicolon_at_end_of_line()
 			{
 				string sql_to_match = @"SQL1;";
-				var expected_scrubbed = new [] { @"SQL1;" };
+				var expected_scrubbed = new [] { @"SQL1" };
 				Console.WriteLine(sql_to_match);
                 var sql_statement_scrubbed = splitter.split(sql_to_match).ToArray();
 				CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
 			}
 
-			[Observation]
-			public void should_not_replace_on_assigning_values_to_variables()
-			{
-				string sql_to_match = @"tmpSql := 'DROP SEQUENCE mutatieStockID';
-EXECUTE IMMEDIATE tmpSql; ";
-				var expected_scrubbed = new [] { @"tmpSql := 'DROP SEQUENCE mutatieStockID';
-EXECUTE IMMEDIATE tmpSql; " };
-				Console.WriteLine(sql_to_match);
-                var sql_statement_scrubbed = splitter.split(sql_to_match).ToArray();
-				CollectionAssert.AreEqual(expected_scrubbed, sql_statement_scrubbed);
-			}
 		}
     }
 }
