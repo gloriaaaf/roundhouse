@@ -17,8 +17,17 @@ namespace roundhouse.databases.oracle
 
         public override string sql_statement_separator_regex_pattern
         {
-            get { return @"(?<KEEP1>^(?:.)*(?:-{2}).*$)|(?<KEEP1>/{1}\*{1}[\S\s]*?\*{1}/{1})|(?<KEEP1>\s)(?<BATCHSPLITTER>;)(?<KEEP2>\s)|(?<KEEP1>\s)(?<BATCHSPLITTER>;)(?<KEEP2>$)"; }
+            get { return @"(?<KEEP1>'{1}[\S\s]*?'{1})|(?<KEEP1>""{1}[\S\s]*?""{1})|(?<KEEP1>(?:\s*)(?:-{2})(?:.*))|(?<KEEP1>/{1}\*{1}[\S\s]*?\*{1}/{1})|(?<KEEP1>(?:\s*)(?:DECLARE{1}[\S\s]*?;\s*?/(?!\*)))|(?<KEEP1>(?:\s*)(?:CREATE\s*OR\s*REPLACE[\S\s]*?;\s*?/(?!\*)))|(?<KEEP1>(?:\s*)(?:BEGIN[\S\s]*?;\s*?/(?!\*)))|(?<KEEP1>\s*)(?<BATCHSPLITTER>;)(?<KEEP2>\s*)"; }
         }
+
+        public override sqlsplitters.StatementSplitter sql_splitter
+        {
+            get
+            {
+                return new OracleStatementSplitter(sql_statement_separator_regex_pattern);
+            }
+        }
+
 
         public override bool supports_ddl_transactions
         {
@@ -145,7 +154,7 @@ namespace roundhouse.databases.oracle
         {
             Log.bound_to(this).log_a_debug_event_containing("Replacing script text \r\n with \n to be compliant with Oracle.");
             // http://www.barrydobson.com/2009/02/17/pls-00103-encountered-the-symbol-when-expecting-one-of-the-following/
-            base.run_sql(sql_to_run.Replace("\r\n", "\n"), connection_type);
+            base.run_sql(sql_to_run.Replace("\r\n", "\n").Replace("\r", "\n"), connection_type);
         }
 
         protected override object run_sql_scalar(string sql_to_run, ConnectionType connection_type, IList<IParameter<IDbDataParameter>> parameters)
