@@ -25,7 +25,7 @@
   <property name="version.full" value="${version.major}.${version.minor}.${version.build}.${version.revision}" />
   <property name="version.full" value="${version.major}.${version.minor}.${version.patch}.0" if="${version.use_semanticversioning}" />
   <property name="repository.path" value="__REPOSITORY_PATH__" overwrite="false" />
-  <property name="microsoft.framework" value="net-3.5" overwrite="false" />
+  <property name="microsoft.framework" value="net-4.0" overwrite="false" />
   <property name="msbuild.configuration" value="Release" overwrite="false" />
   <property name="msbuild.platform" value="Any CPU" overwrite="false" />
   <property name="version.uppercut" value="0" overwrite="false" />

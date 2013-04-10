@@ -54,7 +54,7 @@
     <echo level="Warning" message="Attempting to run NDepend at ${app.ndepend} for file ${files.ndepend_config}." />
 
     <exec program="${app.ndepend}">
-      <arg line="${files.ndepend_config} /OutDir ${dirs.ndepend_results} /InDirs ${path::get-full-path(dirs.build.code)} C:${path.separator}WINDOWS${path.separator}Microsoft.NET${path.separator}Framework${path.separator}v2.0.50727 C:${path.separator}WINDOWS${path.separator}Microsoft.NET${path.separator}Framework${path.separator}v3.0 C:${path.separator}WINDOWS${path.separator}Microsoft.NET${path.separator}Framework${path.separator}v3.5" />
+      <arg line="${files.ndepend_config} /OutDir ${dirs.ndepend_results} /InDirs ${path::get-full-path(dirs.build.code)} 	  C:${path.separator}WINDOWS${path.separator}Microsoft.NET${path.separator}Framework${path.separator}v4.0"	  />
       <!--  /EmitVisualNDependBinXml -->
     </exec>
   </target>
