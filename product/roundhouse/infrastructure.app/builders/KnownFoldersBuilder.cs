@@ -3,6 +3,7 @@ namespace roundhouse.infrastructure.app.builders
     using System;
     using filesystem;
     using folders;
+    using System.Text.RegularExpressions;
 
     public static class KnownFoldersBuilder
     {
@@ -21,12 +22,37 @@ namespace roundhouse.infrastructure.app.builders
             MigrationsFolder runAfterOtherAnyTimeScripts_folder = new DefaultMigrationsFolder(file_system, configuration_property_holder.SqlFilesDirectory, configuration_property_holder.RunAfterOtherAnyTimeScriptsFolderName, false, false, "Run after Other Anytime Scripts");
             MigrationsFolder permissions_folder = new DefaultMigrationsFolder(file_system, configuration_property_holder.SqlFilesDirectory, configuration_property_holder.PermissionsFolderName, false, true, "Permission");
 
-            Folder change_drop_folder = new DefaultFolder(file_system, combine_items_into_one_path(file_system,
-                                                                                                   configuration_property_holder.OutputPath,
-                                                                                                   "migrations",
-                                                                                                   remove_paths_from(configuration_property_holder.DatabaseName,file_system),
-                                                                                                   remove_paths_from(configuration_property_holder.ServerName,file_system)),
-                                                          get_run_date_time_string());
+            Folder change_drop_folder = null;
+
+            Match match = Regex.Match(configuration_property_holder.DatabaseName, @"\(\s*HOST[\s\S]*?\)", RegexOptions.IgnoreCase);
+
+            if (match.Success)
+            {
+                String dbName = match.Groups[0].Value;
+                dbName = Regex.Replace(dbName, @"\(\s*HOST[\s\S]*?\=", string.Empty);
+                dbName = dbName.Replace(")", string.Empty);
+
+                match = Regex.Match(configuration_property_holder.DatabaseName, @"\(\s*SERVICE_NAME[\s\S]*?\)", RegexOptions.IgnoreCase);
+                String instance = match.Groups[0].Value;
+                instance = Regex.Replace(instance, @"\(\s*SERVICE_NAME[\s\S]*?\=", string.Empty);
+                instance = instance.Replace(")", string.Empty);
+
+                change_drop_folder = new DefaultFolder(file_system, combine_items_into_one_path(file_system,
+                                                                                                        configuration_property_holder.OutputPath,
+                                                                                                        "DatabaseTask\\Rounhouse",
+                                                                                                        dbName.Trim() + "-" + instance.Trim(),
+                                                                                                        remove_paths_from(configuration_property_holder.ServerName, file_system)),
+                                                                                                        get_run_date_time_string());
+            }
+            else
+            {
+                change_drop_folder = new DefaultFolder(file_system, combine_items_into_one_path(file_system,
+                                                                                                       configuration_property_holder.OutputPath,
+                                                                                                       "DatabaseTask\\Rounhouse",
+                                                                                                       remove_paths_from(configuration_property_holder.DatabaseName, file_system),
+                                                                                                       remove_paths_from(configuration_property_holder.ServerName, file_system)),
+                                                                                                       get_run_date_time_string());
+            }
 
 			return new DefaultKnownFolders(alter_database_folder, run_after_create_database_folder, run_before_up_folder, up_folder, down_folder, run_first_folder, functions_folder, views_folder, sprocs_folder, indexes_folder, runAfterOtherAnyTimeScripts_folder, permissions_folder, change_drop_folder);
         }
