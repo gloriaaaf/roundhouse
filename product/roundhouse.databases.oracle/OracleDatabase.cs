@@ -9,11 +9,16 @@ namespace roundhouse.databases.oracle
     using System.Text.RegularExpressions;
     using infrastructure.app;
     using infrastructure.extensions;
+    using infrastructure.app.tokens;
+    using sqlsplitters;
     using parameters;
 
     public sealed class OracleDatabase : AdoNetDatabase
     {
         private string connect_options = "Integrated Security";
+        private String db_user = null;
+        private String db_psw = null;
+
 
         public override string sql_statement_separator_regex_pattern
         {
@@ -37,10 +42,15 @@ namespace roundhouse.databases.oracle
                         database_name = part.Substring(part.IndexOf("=") + 1);
                     }
 
-                    //if (string.IsNullOrEmpty(database_name) && (part.to_lower().Contains("user id")))
-                    //{
-                    //    database_name = part.Substring(part.IndexOf("=") + 1);
-                    //}
+                    if (string.IsNullOrEmpty(server_name) && (part.to_lower().Contains("user id")))
+                    {
+                        db_user = part.Substring(part.IndexOf("=") + 1);
+                    }
+
+                    if (string.IsNullOrEmpty(server_name) && (part.to_lower().Contains("password")))
+                    {
+                        db_psw = part.Substring(part.IndexOf("=") + 1);
+                    }
                 }
 
                 if (!connection_string.to_lower().Contains(connect_options.to_lower()))
@@ -187,6 +197,61 @@ namespace roundhouse.databases.oracle
             return new AdoNetParameter(parameter);
         }
 
+        public override bool create_database_if_it_doesnt_exist(string custom_create_database_script)
+        {
+            bool database_was_created = false;
+            try
+            {
+                string create_script = create_database_script();
+                if (!string.IsNullOrEmpty(custom_create_database_script))
+                {
+                    create_script = custom_create_database_script;
+                    if (!configuration.DisableTokenReplacement)
+                    {
+                        create_script = TokenReplacer.replace_tokens(configuration, create_script);
+                    }
+                }
+
+                if (split_batch_statements)
+                {
+                    foreach (var sql_statement in StatementSplitter.split_sql_on_regex_and_remove_empty_statements(create_script, sql_statement_separator_regex_pattern))
+                    {
+                        //should only receive a return value once
+                        var return_value = run_sql_scalar_boolean(sql_statement, ConnectionType.Admin);
+                        if (return_value != null)
+                        {
+                            database_was_created = return_value.Value;
+                        }
+                    }
+                }
+                else
+                {
+                    //should only receive a return value once
+                    var return_value = run_sql_scalar_boolean(create_script, ConnectionType.Admin);
+                    database_was_created = return_value.GetValueOrDefault(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.bound_to(this).log_a_warning_event_containing(
+                    "{0} with provider {1} does not provide a facility for creating a database at this time.{2}{3}",
+                    GetType(), provider, Environment.NewLine, ex.Message);
+            }
+
+            return database_was_created;
+        }
+
+        private bool? run_sql_scalar_boolean(string sql_to_run, ConnectionType connection_type)
+        {
+            var return_value = run_sql_scalar(sql_to_run, connection_type, null);
+            if (return_value != null && return_value != DBNull.Value)
+            {
+                return Convert.ToBoolean(return_value);
+            }
+            return null;
+        }
+
+
         public string insert_version_script()
         {
             return string.Format(
@@ -232,12 +297,12 @@ namespace roundhouse.databases.oracle
                 BEGIN
                     SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = '{0}';
                     IF v_exists = 0 THEN
-                        EXECUTE IMMEDIATE 'CREATE USER {0} IDENTIFIED BY {0}';
-                        EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO {0}';
-                        EXECUTE IMMEDIATE 'GRANT RESOURCE TO {0}';                            
+                        EXECUTE IMMEDIATE 'CREATE USER {0} IDENTIFIED BY {1}';
+                        EXECUTE IMMEDIATE 'GRANT DBA TO {0}';
+                        EXECUTE IMMEDIATE 'ALTER USER {0}  DEFAULT ROLE DBA';                            
                     END IF;
-                END;                        
-                ", database_name.to_upper());
+                END;
+                ", db_user.ToUpper(), db_psw);
         }
 
         public override string set_recovery_mode_script(bool simple)
