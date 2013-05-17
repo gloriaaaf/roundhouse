@@ -9,13 +9,14 @@ namespace roundhouse.databases.oracle
     using System.Text.RegularExpressions;
     using infrastructure.app;
     using infrastructure.extensions;
+    using infrastructure.app.tokens;
     using parameters;
 
     public sealed class OracleDatabase : AdoNetDatabase
     {
         private string connect_options = "Integrated Security";
         private String db_user = null;
-
+        private String db_psw = null;
 
         public override string sql_statement_separator_regex_pattern
         {
@@ -53,6 +54,10 @@ namespace roundhouse.databases.oracle
                         db_user = part.Substring(part.IndexOf("=") + 1);
                     }
 
+                    if (string.IsNullOrEmpty(server_name) && (part.to_lower().Contains("password")))
+                    {
+                        db_psw = part.Substring(part.IndexOf("=") + 1);
+                    }
                 }
 
                 if (!connection_string.to_lower().Contains(connect_options.to_lower()))
@@ -104,6 +109,17 @@ namespace roundhouse.databases.oracle
             ((OracleConnection)connection).InfoMessage += (sender, e) => Log.bound_to(this).log_a_debug_event_containing("  [SQL PRINT]: {0}{1}", Environment.NewLine, e.Message);
         }
 
+        public override void create_or_update_roundhouse_tables()
+        {
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, version_table_name);
+            run_sql(create_roundhouse_version_table(version_table_name), ConnectionType.Default);
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_table_name);
+            run_sql(create_roundhouse_scripts_run_table(scripts_run_table_name),ConnectionType.Default);
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_errors_table_name);
+            run_sql(create_roundhouse_scripts_run_errors_table(scripts_run_errors_table_name),ConnectionType.Default);
+        }
+
+
         public override void run_database_specific_tasks()
         {
             Log.bound_to(this).log_an_info_event_containing("Creating a sequence for the '{0}' table.", version_table_name);
@@ -114,17 +130,7 @@ namespace roundhouse.databases.oracle
             run_sql(create_sequence_script(scripts_run_errors_table_name), ConnectionType.Default);
         }
 
-        public override void create_or_update_roundhouse_tables()
-        {
-            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, version_table_name);
-            run_sql(create_roundhouse_version_table(version_table_name), ConnectionType.Default);
-            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_table_name);
-            run_sql(create_roundhouse_scripts_run_table(scripts_run_table_name), ConnectionType.Default);
-            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_errors_table_name);
-            run_sql(create_roundhouse_scripts_run_errors_table(scripts_run_errors_table_name), ConnectionType.Default);
-        }
-
-        public override string get_version(string repository_path)
+       public override string get_version(string repository_path)
         {
             return run_sql_scalar(get_version_script(repository_path), ConnectionType.Default, null) as string;
         }
@@ -155,7 +161,7 @@ namespace roundhouse.databases.oracle
         {
             Log.bound_to(this).log_a_debug_event_containing("Replacing \r\n with \n to be compliant with Oracle.");
             //http://www.barrydobson.com/2009/02/17/pls-00103-encountered-the-symbol-when-expecting-one-of-the-following/
-            sql_to_run = sql_to_run.Replace("\r\n", "\n").Replace("\r", "\n");
+            sql_to_run = sql_to_run.Replace("\r\n", "\n");
             object return_value = new object();
 
             if (string.IsNullOrEmpty(sql_to_run)) return return_value;
@@ -190,6 +196,59 @@ namespace roundhouse.databases.oracle
             return new AdoNetParameter(parameter);
         }
 
+        public override bool create_database_if_it_doesnt_exist(string custom_create_database_script)
+        {
+            bool database_was_created = false;
+            try
+            {
+                string create_script = create_database_script();
+                if (!string.IsNullOrEmpty(custom_create_database_script))
+                {
+                    create_script = custom_create_database_script;
+                    if (!configuration.DisableTokenReplacement)
+                    {
+                        create_script = TokenReplacer.replace_tokens(configuration, create_script);
+                    }
+                }
+
+                if (split_batch_statements)
+                {
+                    foreach (var sql_statement in sql_splitter.split(create_script))
+                    {
+                        //should only receive a return value once
+                        var return_value = run_sql_scalar_boolean(sql_statement, ConnectionType.Admin);
+                        if (return_value != null)
+                        {
+                            database_was_created = return_value.Value;
+                        }
+                    }
+                }
+                else
+                {
+                    //should only receive a return value once
+                    var return_value = run_sql_scalar_boolean(create_script, ConnectionType.Admin);
+                    database_was_created = return_value.GetValueOrDefault(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.bound_to(this).log_a_warning_event_containing(
+                    "{0} with provider {1} does not provide a facility for creating a database at this time.{2}{3}",
+                    GetType(), provider, Environment.NewLine, ex.Message);
+            }
+
+            return database_was_created;
+        }
+
+        private bool? run_sql_scalar_boolean(string sql_to_run, ConnectionType connection_type)
+        {
+            var return_value = run_sql_scalar(sql_to_run, connection_type, null);
+            if (return_value != null && return_value != DBNull.Value)
+            {
+                return Convert.ToBoolean(return_value);
+            }
+            return null;
+        }
 
         public override string set_recovery_mode_script(bool simple)
         {
@@ -210,12 +269,13 @@ namespace roundhouse.databases.oracle
                 BEGIN
                     SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = '{0}';
                     IF v_exists = 0 THEN
-                        EXECUTE IMMEDIATE 'CREATE USER {0} IDENTIFIED BY {0}';
-                        EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO {0}';
-                        EXECUTE IMMEDIATE 'GRANT RESOURCE TO {0}';                            
+                        EXECUTE IMMEDIATE 'CREATE USER {0} IDENTIFIED BY {1}';
+                        EXECUTE IMMEDIATE 'GRANT DBA TO {0}';
+                        EXECUTE IMMEDIATE 'ALTER USER {0}  DEFAULT ROLE DBA';                            
                     END IF;
-                END;                        
-                ", database_name.to_upper());
+                END;
+                /                        
+                ", db_user.ToUpper(), db_psw);
         }
 
         public string create_roundhouse_version_table(string table_name)
@@ -348,7 +408,7 @@ namespace roundhouse.databases.oracle
                         ,:user_name
                     )
                 ",
-                db_user, roundhouse_schema_name, version_table_name);
+                db_user,roundhouse_schema_name, version_table_name);
         }
 
         public string get_version_script(string repository_path)
@@ -362,7 +422,7 @@ namespace roundhouse.databases.oracle
                             ORDER BY entry_date DESC)
                     WHERE ROWNUM < 2
                 ",
-                db_user, roundhouse_schema_name, version_table_name, repository_path);
+                db_user,roundhouse_schema_name, version_table_name, repository_path);
         }
 
 
@@ -376,8 +436,8 @@ namespace roundhouse.databases.oracle
                                 NVL(repository_path, '') = NVL(:repository_path, '')
                             ORDER BY entry_date DESC)
                     WHERE ROWNUM < 2
-                ",
-                 db_user, roundhouse_schema_name, version_table_name);
+                ", 
+                 db_user,roundhouse_schema_name, version_table_name);
         }
 
         public override string delete_database_script()
