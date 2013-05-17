@@ -267,7 +267,7 @@ namespace roundhouse.databases
             }
         }
 
-        public string get_version(string repository_path)
+        public virtual string get_version(string repository_path)
         {
             string version = "0";
 

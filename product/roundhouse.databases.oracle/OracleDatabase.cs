@@ -14,6 +14,8 @@ namespace roundhouse.databases.oracle
     public sealed class OracleDatabase : AdoNetDatabase
     {
         private string connect_options = "Integrated Security";
+        private String db_user = null;
+
 
         public override string sql_statement_separator_regex_pattern
         {
@@ -37,10 +39,11 @@ namespace roundhouse.databases.oracle
                         database_name = part.Substring(part.IndexOf("=") + 1);
                     }
 
-                    //if (string.IsNullOrEmpty(database_name) && (part.to_lower().Contains("user id")))
-                    //{
-                    //    database_name = part.Substring(part.IndexOf("=") + 1);
-                    //}
+                    if (string.IsNullOrEmpty(server_name) && (part.to_lower().Contains("user id")))
+                    {
+                        db_user = part.Substring(part.IndexOf("=") + 1);
+                    }
+
                 }
 
                 if (!connection_string.to_lower().Contains(connect_options.to_lower()))
@@ -102,30 +105,21 @@ namespace roundhouse.databases.oracle
             run_sql(create_sequence_script(scripts_run_errors_table_name), ConnectionType.Default);
         }
 
-        public string create_sequence_script(string table_name)
+        public override void create_or_update_roundhouse_tables()
         {
-            return string.Format(
-                @"
-                    DECLARE
-                        sequenceExists Integer := 0;
-                    BEGIN
-                        SELECT COUNT(*) INTO sequenceExists FROM user_objects WHERE object_type = 'SEQUENCE' AND UPPER(object_name) = UPPER('{0}_{1}ID');
-                        IF sequenceExists = 0 THEN   
-                        
-                            EXECUTE IMMEDIATE 'CREATE SEQUENCE {0}_{1}id
-                            START WITH 1
-                            INCREMENT BY 1
-                            MINVALUE 1
-                            MAXVALUE 999999999999999999999999999
-                            CACHE 20
-                            NOCYCLE 
-                            NOORDER';
-                            
-                        END IF;
-                    END;
-              ",
-               roundhouse_schema_name, table_name);
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, version_table_name);
+            run_sql(create_roundhouse_version_table(version_table_name), ConnectionType.Default);
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_table_name);
+            run_sql(create_roundhouse_scripts_run_table(scripts_run_table_name), ConnectionType.Default);
+            Log.bound_to(this).log_an_info_event_containing("Creating table [{0}_{1}].", roundhouse_schema_name, scripts_run_errors_table_name);
+            run_sql(create_roundhouse_scripts_run_errors_table(scripts_run_errors_table_name), ConnectionType.Default);
         }
+
+        public override string get_version(string repository_path)
+        {
+            return run_sql_scalar(get_version_script(repository_path), ConnectionType.Default, null) as string;
+        }
+
 
         public override long insert_version_and_get_version_id(string repository_path, string repository_version)
         {
@@ -152,7 +146,7 @@ namespace roundhouse.databases.oracle
         {
             Log.bound_to(this).log_a_debug_event_containing("Replacing \r\n with \n to be compliant with Oracle.");
             //http://www.barrydobson.com/2009/02/17/pls-00103-encountered-the-symbol-when-expecting-one-of-the-following/
-            sql_to_run = sql_to_run.Replace("\r\n", "\n");
+            sql_to_run = sql_to_run.Replace("\r\n", "\n").Replace("\r", "\n");
             object return_value = new object();
 
             if (string.IsNullOrEmpty(sql_to_run)) return return_value;
@@ -187,40 +181,15 @@ namespace roundhouse.databases.oracle
             return new AdoNetParameter(parameter);
         }
 
-        public string insert_version_script()
+
+        public override string set_recovery_mode_script(bool simple)
         {
-            return string.Format(
-                @"
-                    INSERT INTO {0}_{1}
-                    (
-                        id
-                        ,repository_path
-                        ,version
-                        ,entered_by
-                    )
-                    VALUES
-                    (
-                        {0}_{1}id.NEXTVAL
-                        ,:repository_path
-                        ,:repository_version
-                        ,:user_name
-                    )
-                ",
-                roundhouse_schema_name, version_table_name);
+            return string.Empty;
         }
 
-        public string get_version_id_script()
+        public override string restore_database_script(string restore_from_path, string custom_restore_options)
         {
-            return string.Format(
-                @"
-                    SELECT id
-                    FROM (SELECT * FROM {0}_{1}
-                            WHERE 
-                                NVL(repository_path, '') = NVL(:repository_path, '')
-                            ORDER BY entry_date DESC)
-                    WHERE ROWNUM < 2
-                ",
-                roundhouse_schema_name, version_table_name);
+            return string.Empty;
         }
 
         public override string create_database_script()
@@ -240,14 +209,166 @@ namespace roundhouse.databases.oracle
                 ", database_name.to_upper());
         }
 
-        public override string set_recovery_mode_script(bool simple)
+        public string create_roundhouse_version_table(string table_name)
         {
-            return string.Empty;
+            return string.Format(
+                @"
+                    DECLARE
+                        tableExists Integer := 0;
+                    BEGIN
+                        SELECT COUNT(*) INTO tableExists FROM user_objects WHERE object_type = 'TABLE' AND UPPER(object_name) = UPPER('{1}_{2}');
+                        IF tableExists = 0 THEN   
+                        
+                            EXECUTE IMMEDIATE 'CREATE TABLE {0}.{1}_{2} (
+                            ID NUMBER(20,0) NOT NULL ENABLE,
+	                        REPOSITORY_PATH NVARCHAR2(255),
+	                        VERSION NVARCHAR2(50),
+	                        ENTRY_DATE TIMESTAMP (4),
+	                        MODIFIED_DATE TIMESTAMP (4),
+	                        ENTERED_BY NVARCHAR2(50),
+	                        PRIMARY KEY (ID) )';
+                            
+                        END IF;
+                    END;
+              ",
+               db_user, roundhouse_schema_name, table_name);
+
         }
 
-        public override string restore_database_script(string restore_from_path, string custom_restore_options)
+        public string create_roundhouse_scripts_run_table(string table_name)
         {
-            return string.Empty;
+            return string.Format(
+                @"
+                    DECLARE
+                        tableExists Integer := 0;
+                    BEGIN
+                        SELECT COUNT(*) INTO tableExists FROM user_objects WHERE object_type = 'TABLE' AND UPPER(object_name) = UPPER('{1}_{2}');
+                        IF tableExists = 0 THEN   
+                        
+                            EXECUTE IMMEDIATE 'CREATE TABLE {0}.{1}_{2} (
+                            ID NUMBER(20,0) NOT NULL ENABLE,
+	                        VERSION_ID NUMBER(20,0),
+	                        SCRIPT_NAME NVARCHAR2(255),
+	                        TEXT_OF_SCRIPT CLOB,
+	                        TEXT_HASH NVARCHAR2(512),
+	                        ONE_TIME_SCRIPT NUMBER(1,0),
+	                        ENTRY_DATE TIMESTAMP (4),
+	                        MODIFIED_DATE TIMESTAMP (4),
+	                        ENTERED_BY NVARCHAR2(50),
+	                        PRIMARY KEY (ID) )';
+                            
+                        END IF;
+                    END;
+              ",
+               db_user, roundhouse_schema_name, table_name);
+
+        }
+
+        public string create_roundhouse_scripts_run_errors_table(string table_name)
+        {
+            return string.Format(
+                @"
+                    DECLARE
+                        tableExists Integer := 0;
+                    BEGIN
+                        SELECT COUNT(*) INTO tableExists FROM user_objects WHERE object_type = 'TABLE' AND UPPER(object_name) = UPPER('{1}_{2}');
+                        IF tableExists = 0 THEN   
+                        
+                            EXECUTE IMMEDIATE 'CREATE TABLE {0}.{1}_{2} (
+                            ID NUMBER(20,0) NOT NULL ENABLE,
+	                        REPOSITORY_PATH NVARCHAR2(255),
+	                        VERSION NVARCHAR2(50),
+	                        SCRIPT_NAME NVARCHAR2(255),
+	                        TEXT_OF_SCRIPT CLOB,
+	                        ERRONEOUS_PART_OF_SCRIPT CLOB,
+	                        ERROR_MESSAGE CLOB,
+	                        ENTRY_DATE TIMESTAMP (4),
+	                        MODIFIED_DATE TIMESTAMP (4),
+	                        ENTERED_BY NVARCHAR2(50),
+	                        PRIMARY KEY (ID) )';
+                            
+                        END IF;
+                    END;
+              ",
+               db_user, roundhouse_schema_name, table_name);
+
+        }
+
+
+        public string create_sequence_script(string table_name)
+        {
+            return string.Format(
+                @"
+                    DECLARE
+                        sequenceExists Integer := 0;
+                    BEGIN
+                        SELECT COUNT(*) INTO sequenceExists FROM user_objects WHERE object_type = 'SEQUENCE' AND UPPER(object_name) = UPPER('{1}_{2}ID');
+                        IF sequenceExists = 0 THEN   
+                        
+                            EXECUTE IMMEDIATE 'CREATE SEQUENCE {0}.{1}_{2}id
+                            START WITH 1
+                            INCREMENT BY 1
+                            MINVALUE 1
+                            MAXVALUE 999999999999999999999999999
+                            CACHE 20
+                            NOCYCLE 
+                            NOORDER';
+                            
+                        END IF;
+                    END;
+              ",
+               db_user, roundhouse_schema_name, table_name);
+        }
+
+        public string insert_version_script()
+        {
+            return string.Format(
+                @"
+                    INSERT INTO {0}.{1}_{2}
+                    (
+                        id
+                        ,repository_path
+                        ,version
+                        ,entered_by
+                    )
+                    VALUES
+                    (
+                        {0}.{1}_{2}id.NEXTVAL
+                        ,:repository_path
+                        ,:repository_version
+                        ,:user_name
+                    )
+                ",
+                db_user, roundhouse_schema_name, version_table_name);
+        }
+
+        public string get_version_script(string repository_path)
+        {
+            return string.Format(
+                 @"
+                    SELECT version
+                    FROM (SELECT * FROM {0}.{1}_{2}
+                            WHERE 
+                                repository_path = '{3}'
+                            ORDER BY entry_date DESC)
+                    WHERE ROWNUM < 2
+                ",
+                db_user, roundhouse_schema_name, version_table_name, repository_path);
+        }
+
+
+        public string get_version_id_script()
+        {
+            return string.Format(
+                @"
+                    SELECT id
+                    FROM (SELECT * FROM {0}.{1}_{2}
+                            WHERE 
+                                NVL(repository_path, '') = NVL(:repository_path, '')
+                            ORDER BY entry_date DESC)
+                    WHERE ROWNUM < 2
+                ",
+                 db_user, roundhouse_schema_name, version_table_name);
         }
 
         public override string delete_database_script()
@@ -261,8 +382,10 @@ namespace roundhouse.databases.oracle
                     IF v_exists > 0 THEN
                         EXECUTE IMMEDIATE 'DROP USER {0} CASCADE';
                     END IF;
-                END;",
+                END;
+                /",
             database_name.to_upper());
         }
+
     }
 }
